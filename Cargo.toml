@@ -1,0 +1,15 @@
+[package]
+name = "ps"
+version = "0.1.0"
+authors = ["user <user@laptop>"]
+edition = "2018"
+
+description = "Common library for problem solving"
+repository = "https://github.com/A001379/ps"
+license = "MIT"
+
+keywords = ["problem-solving", "competitive", "leetcode", "project-euler", "codeforces"]
+categories = ["algorithms", "data-structures", "mathematics", "rust-patterns"]
+
+[workspace]
+members = ["euler"]
