@@ -416,6 +416,11 @@ impl C {
         Self::new(self.re, -self.im)
     }
 }
+impl fmt::Display for C {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}{}{}i", self.re, if self.im < 0.0 { "" } else { "+" }, self.im)
+    }
+}
 impl From<f64> for C {
     fn from(re: f64) -> Self {
         Self::new(re, 0.0)
