@@ -20,11 +20,6 @@ impl<P: Modulo> Quotient<P> {
         }
     }
 
-    /// Creates the field from an arbitrary integer.
-    pub fn from_signed(value: i64) -> Self {
-        Self::raw((value as i128).rem_euclid(P::VALUE as i128) as _)
-    }
-
     /// Computes `self^exp`.
     pub fn pow(mut self, mut exp: u64) -> Self {
         let mut result = Self::raw(1);
@@ -83,6 +78,21 @@ impl<P: Modulo> fmt::Display for Quotient<P> {
 impl<P: Modulo> From<u64> for Quotient<P> {
     fn from(value: u64) -> Self {
         Self::raw(value.rem_euclid(P::VALUE))
+    }
+}
+impl<P: Modulo> From<i64> for Quotient<P> {
+    fn from(value: i64) -> Self {
+        Self::raw((value as i128).rem_euclid(P::VALUE as i128) as _)
+    }
+}
+impl<P: Modulo> From<u32> for Quotient<P> {
+    fn from(value: u32) -> Self {
+        Self::from(value as u64)
+    }
+}
+impl<P: Modulo> From<i32> for Quotient<P> {
+    fn from(value: i32) -> Self {
+        Self::from(value as i64)
     }
 }
 impl<P: Modulo> Neg for Quotient<P> {
