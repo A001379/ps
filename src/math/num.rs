@@ -2,9 +2,226 @@
 
 use super::diophantine::gcd;
 use std::{
+    cmp::Ordering,
     fmt,
-    ops::{Add, Div, Mul, Neg, Sub},
+    ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign},
 };
+
+const DIV: u64 = 1_000_000_000_000_000;
+
+/// Big integer.
+///
+/// # Examples
+///
+/// ```
+/// use ps::math::num::Z;
+///
+/// let a = Z::parse("100000000000000000000000000000000");
+/// let b = Z::from(1);
+/// let c = Z::parse("100000000000000000000000000000001");
+/// let d = Z::parse("99999999999999999999999999999999");
+/// assert_eq!(a - d, b);
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, Hash)]
+pub struct Z {
+    mem: Vec<u64>,
+    sign: bool,
+}
+impl Z {
+    pub fn parse(value: &str) -> Self {
+        let sign = value.starts_with('-');
+        let mem = value[(sign as usize)..]
+            .as_bytes()
+            .rchunks(15)
+            .map(|chunk| std::str::from_utf8(chunk).unwrap().parse::<u64>().unwrap())
+            .collect::<Vec<_>>();
+        Self { mem, sign }
+    }
+    pub fn abs(self) -> Self {
+        Self {
+            mem: self.mem,
+            sign: false,
+        }
+    }
+}
+impl fmt::Display for Z {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.sign {
+            write!(f, "-")?
+        }
+        for (i, n) in self.mem.iter().rev().enumerate() {
+            if i == 0 {
+                write!(f, "{}", n)?
+            } else {
+                write!(f, "{:0>15}", n)?
+            }
+        }
+        Ok(())
+    }
+}
+impl From<u64> for Z {
+    fn from(value: u64) -> Self {
+        let mut mem = vec![value % DIV];
+        if value >= DIV {
+            mem.push(value / DIV);
+        }
+        Self { mem, sign: false }
+    }
+}
+impl From<i64> for Z {
+    fn from(value: i64) -> Self {
+        let sign = value < 0;
+        let value = value.abs() as u64;
+        let mut mem = vec![value % DIV];
+        if value >= DIV {
+            mem.push(value / DIV);
+        }
+        Self { mem, sign }
+    }
+}
+impl From<u32> for Z {
+    fn from(value: u32) -> Self {
+        Self::from(value as u64)
+    }
+}
+impl From<i32> for Z {
+    fn from(value: i32) -> Self {
+        Self::from(value as i64)
+    }
+}
+fn cmp_mem(lhs: &[u64], rhs: &[u64]) -> Ordering {
+    let result = lhs.len().cmp(&rhs.len());
+    if result != Ordering::Equal {
+        return result;
+    }
+    for (l, r) in lhs.iter().rev().zip(rhs.iter().rev()) {
+        let result = l.cmp(r);
+        if result != Ordering::Equal {
+            return result;
+        }
+    }
+    Ordering::Equal
+}
+impl Ord for Z {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.sign {
+            if other.sign {
+                cmp_mem(&other.mem, &self.mem)
+            } else {
+                Ordering::Less
+            }
+        } else if other.sign {
+            Ordering::Greater
+        } else {
+            cmp_mem(&self.mem, &other.mem)
+        }
+    }
+}
+impl PartialOrd for Z {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Neg for Z {
+    type Output = Self;
+    fn neg(self) -> Self {
+        let sign = if self.mem == vec![0] { false } else { !self.sign };
+        Self { mem: self.mem, sign }
+    }
+}
+
+fn add_to_mem(this: &mut Vec<u64>, other: &[u64]) {
+    let mut carry = 0;
+    for (idx, rhs) in other.iter().enumerate() {
+        if idx >= this.len() {
+            this.push(0);
+        }
+        this[idx] += carry + rhs;
+        carry = this[idx] / DIV;
+        this[idx] %= DIV;
+    }
+    if carry > 0 {
+        this.push(carry);
+    }
+}
+impl AddAssign for Z {
+    fn add_assign(&mut self, other: Self) {
+        if self.sign != other.sign {
+            self.sub_assign(other.neg());
+        } else {
+            add_to_mem(&mut self.mem, &other.mem);
+        }
+    }
+}
+impl Add for Z {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        let mut result = self;
+        result.add_assign(other);
+        result
+    }
+}
+
+fn sub_to_mem(this: &mut Vec<u64>, other: &[u64]) {
+    let mut other = other.iter();
+    let mut idx = 0;
+    let mut carry = 0;
+    loop {
+        let peek = other.next();
+        if carry == 0 && peek == None {
+            break;
+        }
+        let rhs = peek.cloned().unwrap_or(0);
+        if this[idx] >= rhs + carry {
+            this[idx] -= rhs + carry;
+            carry = 0;
+        } else {
+            this[idx] += DIV - rhs - carry;
+            carry = 1;
+        }
+        idx += 1;
+    }
+    idx = this.len();
+    while idx > 0 {
+        idx -= 1;
+        if this[idx] > 0 {
+            break;
+        }
+    }
+    this.resize(idx + 1, 0);
+}
+impl SubAssign for Z {
+    fn sub_assign(&mut self, other: Self) {
+        if self.sign != other.sign {
+            self.add_assign(other.neg());
+        } else {
+            match cmp_mem(&self.mem, &other.mem) {
+                Ordering::Equal => {
+                    self.mem = vec![0];
+                    self.sign = false;
+                }
+                Ordering::Less => {
+                    let mut mem = other.mem.clone();
+                    sub_to_mem(&mut mem, &self.mem);
+                    self.mem = mem;
+                    self.sign = true;
+                }
+                Ordering::Greater => {
+                    sub_to_mem(&mut self.mem, &other.mem);
+                    self.sign = false;
+                }
+            }
+        }
+    }
+}
+impl Sub for Z {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        let mut result = self;
+        result.sub_assign(other);
+        result
+    }
+}
 
 /// Rational number.
 ///
