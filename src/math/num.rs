@@ -4,7 +4,7 @@ use super::diophantine::gcd;
 use std::{
     cmp::Ordering,
     fmt,
-    ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
 const DIV: u64 = 1_000_000_000_000_000;
@@ -201,7 +201,7 @@ impl SubAssign for Z {
                     self.sign = false;
                 }
                 Ordering::Less => {
-                    let mut mem = other.mem.clone();
+                    let mut mem = other.mem;
                     sub_to_mem(&mut mem, &self.mem);
                     self.mem = mem;
                     self.sign = true;
@@ -258,6 +258,16 @@ pub struct Q {
     pub den: i64,
 }
 impl Q {
+    /// Convert to canonical form, i.e., gcd(num, den) = 1.
+    ///
+    /// # Arguments
+    ///
+    /// * `num`, `den` - Numerator and denominator.
+    fn canonicalize(&mut self) {
+        let g = gcd(self.num.abs() as u64, self.den.abs() as u64) as i64 * self.den.signum();
+        self.num /= g;
+        self.den /= g;
+    }
     /// Creates a new rational number if `dem != 0`, or gives `None` otherwise.
     ///
     /// # Arguments
@@ -267,11 +277,9 @@ impl Q {
         if den == 0 {
             None
         } else {
-            let g = gcd(num.abs() as u64, den.abs() as u64) as i64 * den.signum();
-            Some(Self {
-                num: num / g,
-                den: den / g,
-            })
+            let mut res = Self { num, den };
+            res.canonicalize();
+            Some(res)
         }
     }
     /// Computes the absolute value.
@@ -285,8 +293,8 @@ impl Q {
     pub fn recip(self) -> Self {
         let g = self.num.signum();
         Self {
-            num: self.den / g,
-            den: self.num / g,
+            num: self.den * g,
+            den: self.num * g,
         }
     }
 }
@@ -310,23 +318,51 @@ impl Neg for Q {
     }
 }
 #[allow(clippy::suspicious_arithmetic_impl)]
+impl AddAssign for Q {
+    fn add_assign(&mut self, other: Self) {
+        self.num = self.num * other.den + self.den * other.num;
+        self.den *= other.den;
+        self.canonicalize();
+    }
+}
 impl Add for Q {
     type Output = Self;
     fn add(self, other: Self) -> Self {
-        Self::new(self.num * other.den + self.den * other.num, self.den * other.den).unwrap()
+        let mut res = self;
+        res += other;
+        res
     }
 }
-#[allow(clippy::suspicious_arithmetic_impl)]
-impl Sub for Q {
-    type Output = Self;
-    fn sub(self, other: Self) -> Self {
-        Self::new(self.num * other.den - self.den * other.num, self.den * other.den).unwrap()
+impl MulAssign for Q {
+    fn mul_assign(&mut self, other: Self) {
+        self.num *= other.num;
+        self.den *= other.den;
+        self.canonicalize();
     }
 }
 impl Mul for Q {
     type Output = Self;
     fn mul(self, other: Self) -> Self {
-        Self::new(self.num * other.num, self.den * other.den).unwrap()
+        let mut res = self;
+        res *= other;
+        res
+    }
+}
+impl SubAssign for Q {
+    fn sub_assign(&mut self, other: Self) {
+        *self += -other;
+    }
+}
+impl Sub for Q {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        self + (-other)
+    }
+}
+#[allow(clippy::suspicious_op_assign_impl)]
+impl DivAssign for Q {
+    fn div_assign(&mut self, other: Self) {
+        *self *= other.recip()
     }
 }
 #[allow(clippy::suspicious_arithmetic_impl)]
@@ -432,24 +468,50 @@ impl Neg for C {
         Self::new(-self.re, -self.im)
     }
 }
+impl AddAssign for C {
+    fn add_assign(&mut self, other: Self) {
+        self.re += other.re;
+        self.im += other.im;
+    }
+}
 impl Add for C {
     type Output = Self;
     fn add(self, other: Self) -> Self {
-        Self::new(self.re + other.re, self.im + other.im)
+        let mut res = self;
+        res += other;
+        res
     }
 }
-impl Sub for C {
-    type Output = Self;
-    fn sub(self, other: Self) -> Self {
-        Self::new(self.re - other.re, self.im - other.im)
+impl MulAssign for C {
+    fn mul_assign(&mut self, other: Self) {
+        let re = self.re;
+        self.re = self.re * other.re - self.im * other.im;
+        self.im = self.im * other.re + re * other.im;
     }
 }
 impl Mul for C {
     type Output = Self;
     fn mul(self, other: Self) -> Self {
-        let re = self.re * other.re - self.im * other.im;
-        let im = self.im * other.re + self.re * other.im;
-        Self::new(re, im)
+        let mut res = self;
+        res *= other;
+        res
+    }
+}
+impl SubAssign for C {
+    fn sub_assign(&mut self, other: Self) {
+        *self += -other
+    }
+}
+impl Sub for C {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        self + (-other)
+    }
+}
+#[allow(clippy::suspicious_op_assign_impl)]
+impl DivAssign for C {
+    fn div_assign(&mut self, other: Self) {
+        *self *= other.recip();
     }
 }
 #[allow(clippy::suspicious_arithmetic_impl)]
